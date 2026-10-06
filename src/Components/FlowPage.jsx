@@ -479,7 +479,7 @@ export default function ZygnQuestionnaire() {
       return false;
     } catch (submitError) {
       console.error("[form] Submit error:", submitError);
-      setFlowMsg("Network error. Please try again.");
+      setFlowMsg(submitError?.message || "Network error. Please try again.");
       return false;
     } finally {
       setIsSubmitting(false);
