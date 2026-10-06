@@ -1,6 +1,3 @@
-// Pure lead parsing + Desk field mapping (no Node APIs, no env).
-// Shared by the browser (src/api/submitLead.js posts straight to Desk) and the
-// optional Node server (server/submitLead.js), so both send identical fields.
 import {
   ROLE_MAP,
   TEAM_MAP,
@@ -12,8 +9,6 @@ import {
   getLabel,
   getModulesLabel,
 } from "./leadMaps.js";
-
-export const DESK_SUBJECT = "zygn google ads leads";
 
 function field(obj, keys) {
   for (const key of keys) {
@@ -38,19 +33,11 @@ function normalizeModules(raw) {
   return [];
 }
 
-function formatSubmittedAt() {
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  }).format(new Date());
-}
-
-export function parseLeadBody(body) {
+/**
+ * Turn the flow answers into flat Desk columns.
+ * @returns {{ honeypot?: boolean, error?: string, fields?: Record<string, string> }}
+ */
+export function mapLeadFields(body) {
   const fullName = field(body, ["full_name", "fullname", "name"]);
   const email = field(body, ["email"]).replace(/[\r\n]/g, "");
   const mobile = field(body, ["mobile", "phone"]);
@@ -67,25 +54,17 @@ export function parseLeadBody(body) {
   const timeline = field(body, ["timeline"]);
   const budget = field(body, ["budget"]);
   const formType = field(body, ["form_type"]) || "flow";
-  const page = field(body, ["page", "landing_page"]) || "";
+  const page = field(body, ["page", "landing_page"]);
   const honeypot = field(body, ["honeypot"]);
 
-  if (honeypot) {
-    return { honeypot: true };
-  }
-  if (!fullName || fullName.length < 2) {
-    return { error: { status: 400, message: "Enter your full name" } };
-  }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return { error: { status: 400, message: "Invalid email" } };
-  }
+  if (honeypot) return { honeypot: true };
+  if (!fullName || fullName.length < 2) return { error: "Enter your full name" };
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Invalid email" };
   if (!mobile || String(mobile).replace(/\D/g, "").length < 10) {
-    return { error: { status: 400, message: "Enter valid phone number" } };
+    return { error: "Enter valid phone number" };
   }
 
-  const deskFields = {
-    form: "contact",
-    honeypot: "",
+  const fields = {
     name: fullName.replace(/[\r\n]/g, ""),
     email,
     phone: `${countryCode}${mobile}`,
@@ -102,13 +81,11 @@ export function parseLeadBody(body) {
     budget: getLabel(budget, BUDGET_MAP),
     form_type: formType,
     landing_page: page || "Not provided",
-    submitted_at: formatSubmittedAt(),
-    subject: DESK_SUBJECT,
   };
 
   if (tools === "software" && toolOther) {
-    deskFields.tool_other = toolOther;
+    fields.tool_other = toolOther;
   }
 
-  return { deskFields };
+  return { fields };
 }

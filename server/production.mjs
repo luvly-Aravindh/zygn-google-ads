@@ -1,15 +1,12 @@
-import "dotenv/config";
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, extname, basename, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { config } from "./config.js";
-import { handleApi, logStartupStatus } from "./http.js";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const distDir = resolve(join(__dirname, "..", "dist"));
 const indexHtml = join(distDir, "index.html");
-const port = config.port;
+const port = Number(process.env.PORT) || 3000;
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -32,12 +29,11 @@ const MIME = {
   ".webmanifest": "application/manifest+json",
 };
 
-// Never serve these from the build root, even if a stray file lands in dist/.
 const BLOCKED_EXT = new Set([".env", ".map"]);
 
 function isBlocked(filePath) {
   const name = basename(filePath);
-  if (name.startsWith(".")) return true; // .env, .git, etc.
+  if (name.startsWith(".")) return true;
   if (BLOCKED_EXT.has(extname(name))) return true;
   return false;
 }
@@ -78,7 +74,6 @@ function serveStatic(req, res) {
   }
 
   if (existsSync(target) && statSync(target).isFile()) {
-    // Vite fingerprints everything under /assets, so those can cache for a year.
     const cache = pathname.startsWith("/assets/")
       ? "public, max-age=31536000, immutable"
       : "no-cache";
@@ -86,8 +81,6 @@ function serveStatic(req, res) {
     return;
   }
 
-  // A path that looks like a file but does not exist is a real 404.
-  // Everything else is an SPA route and gets index.html.
   if (extname(pathname)) {
     res.writeHead(404);
     res.end("Not found");
@@ -103,18 +96,7 @@ function serveStatic(req, res) {
   res.end("Build missing: dist/index.html not found. Run `npm run build`.");
 }
 
-createServer(async (req, res) => {
-  try {
-    if (await handleApi(req, res)) return;
-  } catch (err) {
-    console.error("[api] unhandled:", err);
-    if (!res.headersSent) {
-      res.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
-      res.end(JSON.stringify({ status: "error", message: "Internal error" }));
-    }
-    return;
-  }
-
+createServer((req, res) => {
   if (req.method === "GET" || req.method === "HEAD") {
     serveStatic(req, res);
     return;
@@ -122,10 +104,9 @@ createServer(async (req, res) => {
 
   res.writeHead(405);
   res.end("Method not allowed");
-}).listen(port, async () => {
+}).listen(port, () => {
   console.log(`Zygn audit flow running on http://localhost:${port}`);
   if (!existsSync(indexHtml)) {
     console.error(`[boot] dist/index.html missing at ${indexHtml}. Run \`npm run build\` first.`);
   }
-  await logStartupStatus();
 });

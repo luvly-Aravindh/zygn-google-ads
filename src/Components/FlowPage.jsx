@@ -462,23 +462,16 @@ export default function ZygnQuestionnaire() {
       budget: finalAnswers.budget || "",
     };
 
-    console.log("[form] Submitting:", submissionData);
-
     try {
       const data = await submitFlowLead(submissionData);
-      console.log("[form] Response:", data);
 
-      if (data.duplicate || data.status === "success") {
-        console.log("[form] Submission successful");
+      if (data.duplicate || data.status === "success" || data.skipped) {
         return true;
       }
 
-      const errorMsg = data.message || data.detail || "Submission failed. Please try again.";
-      console.error("[form] Submission error:", errorMsg, data);
-      setFlowMsg(errorMsg);
+      setFlowMsg(data.message || "Submission failed. Please try again.");
       return false;
     } catch (submitError) {
-      console.error("[form] Submit error:", submitError);
       setFlowMsg(submitError?.message || "Network error. Please try again.");
       return false;
     } finally {

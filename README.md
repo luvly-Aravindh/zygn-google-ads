@@ -1,18 +1,17 @@
+# Zygn audit landing page
 
-Then redeploy and open `https://zygn-audit.getnos.io/api/health`.
-`"ok": true` means Desk accepted the key. `"ok": false` prints exactly why.
-The container logs also print `[boot] Desk key check: OK` or `FAILED` on every start.
+The form posts each answer straight to Getnos Desk (`https://deskbackend.getnos.io/v1/lead`). There is no lead API on this site.
 
-## Failure messages the visitor can see
+Email subject for every lead: `New audit lead - zygn`.
 
-| Message | Meaning |
-| --- | --- |
-| Network error. Please check your connection and try again. | Request never reached the server (offline, DNS, blocked, 30s timeout) |
-| We could not save your details right now. Please try again in a moment. | Server answered with an error. Reason is in browser console (`detail`) and in `/api/health` |
-| Enter your full name / Invalid email / Enter valid phone number | Validation |
+```bash
+npm install
+npm run dev
+```
 
-## Secrets
+Production build:
 
-Never hardcode the Desk key in any file that ships to the browser.
-`DESK_API_KEY` lives only in the server environment (host env vars in Docker,
-or a gitignored `.env` in local dev) and is used server-side by `server/`.
+```bash
+npm run build
+npm start
+```
