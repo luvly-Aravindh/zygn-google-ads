@@ -5,7 +5,7 @@ import { mapLeadFields } from "./leadFields.js";
    Each answer is its own JSON field. */
 
 const DESK_URL = import.meta.env.VITE_DESK_URL || "https://deskbackend.getnos.io/v1/lead";
-const API_KEY = import.meta.env.VITE_DESK_API_KEY || "lh_PfBvLDISEFqaWa4TsRZ--1yD5F4Mk1rZ6_mWdtUb7V0";
+const API_KEY = import.meta.env.VITE_DESK_API_KEY || "lh_O89-faOZSIc15eP8iijRVTIyZiM5e9oUqiCGrwP5FuE";
 const SUBJECT = "New audit lead - zygn";
 
 const NETWORK_FAIL = "Network error. Please check your connection and try again.";
