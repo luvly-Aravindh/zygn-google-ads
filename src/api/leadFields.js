@@ -1,14 +1,26 @@
-import {
-  ROLE_MAP,
-  TEAM_MAP,
-  PROJECTS_MAP,
-  BUSINESS_MAP,
-  TOOLS_MAP,
-  TIMELINE_MAP,
-  BUDGET_MAP,
-  getLabel,
-  getModulesLabel,
-} from "./leadMaps.js";
+const TEAM_MAP = {
+  s5: "1 to 5",
+  s14: "6 to 14",
+  s30: "15 to 30",
+  s60: "31 to 60",
+  s60plus: "More than 60",
+};
+
+const TIMELINE_MAP = {
+  now: "This month",
+  q90: "Within the next 90 days",
+  exploring: "Just exploring for now",
+};
+
+const BUDGET_MAP = {
+  yes: "Yes, that fits",
+  no: "Not at this stage",
+};
+
+function label(value, map) {
+  if (!value) return "";
+  return map[value] ?? value;
+}
 
 function field(obj, keys) {
   for (const key of keys) {
@@ -20,21 +32,8 @@ function field(obj, keys) {
   return "";
 }
 
-function normalizeModules(raw) {
-  if (Array.isArray(raw)) return raw.filter(Boolean);
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.filter(Boolean);
-    } catch {
-      return raw.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-  }
-  return [];
-}
-
 /**
- * Turn the flow answers into flat Desk columns.
+ * Turn the form answers into flat Desk columns.
  * @returns {{ honeypot?: boolean, error?: string, fields?: Record<string, string> }}
  */
 export function mapLeadFields(body) {
@@ -42,18 +41,12 @@ export function mapLeadFields(body) {
   const email = field(body, ["email"]).replace(/[\r\n]/g, "");
   const mobile = field(body, ["mobile", "phone"]);
   const countryCode = field(body, ["country_code"]) || "+91";
-  const studioName = field(body, ["studio_name"]);
+  const studioName = field(body, ["studio_name", "company"]);
   const studioCity = field(body, ["studio_city", "city"]);
-  const role = field(body, ["role"]);
   const team = field(body, ["team"]);
-  const projects = field(body, ["projects"]);
-  const businessType = field(body, ["business_type", "biz"]);
-  const modules = normalizeModules(body.modules);
-  const tools = field(body, ["tools"]);
-  const toolOther = field(body, ["tool_other"]);
   const timeline = field(body, ["timeline"]);
   const budget = field(body, ["budget"]);
-  const formType = field(body, ["form_type"]) || "flow";
+  const formType = field(body, ["form_type"]) || "google_ads";
   const page = field(body, ["page", "landing_page"]);
   const honeypot = field(body, ["honeypot"]);
 
@@ -63,29 +56,25 @@ export function mapLeadFields(body) {
   if (!mobile || String(mobile).replace(/\D/g, "").length < 10) {
     return { error: "Enter valid phone number" };
   }
+  if (!studioName || studioName.length < 2) return { error: "Enter your company name" };
+  if (!studioCity || studioCity.length < 2) return { error: "Enter your city" };
+  if (!team) return { error: "Choose your team size" };
+  if (!timeline) return { error: "Choose a timeline" };
+  if (!budget) return { error: "Choose a budget option" };
 
-  const fields = {
-    name: fullName.replace(/[\r\n]/g, ""),
-    email,
-    phone: `${countryCode}${mobile}`,
-    country_code: countryCode,
-    studio_name: studioName || "Not provided",
-    studio_city: studioCity || "Not provided",
-    current_role: getLabel(role, ROLE_MAP),
-    team_size: getLabel(team, TEAM_MAP),
-    projects: getLabel(projects, PROJECTS_MAP),
-    business_type: getLabel(businessType, BUSINESS_MAP),
-    modules: getModulesLabel(modules),
-    tools: getLabel(tools, TOOLS_MAP),
-    timeline: getLabel(timeline, TIMELINE_MAP),
-    budget: getLabel(budget, BUDGET_MAP),
-    form_type: formType,
-    landing_page: page || "Not provided",
+  return {
+    fields: {
+      name: fullName.replace(/[\r\n]/g, ""),
+      email,
+      phone: `${countryCode}${mobile}`,
+      country_code: countryCode,
+      studio_name: studioName,
+      studio_city: studioCity,
+      team_size: label(team, TEAM_MAP),
+      timeline: label(timeline, TIMELINE_MAP),
+      budget: label(budget, BUDGET_MAP),
+      form_type: formType,
+      landing_page: page || "Not provided",
+    },
   };
-
-  if (tools === "software" && toolOther) {
-    fields.tool_other = toolOther;
-  }
-
-  return { fields };
 }

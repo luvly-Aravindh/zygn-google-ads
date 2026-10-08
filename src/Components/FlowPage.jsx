@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Logo from "../assets/logo.png";
 import { submitFlowLead } from "../api/submitLead.js";
 
@@ -269,31 +269,23 @@ const css = `
   }
 `;
 
-// ─── ICONS ───────────────────────────────────────────────────────────────────
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const GA_ID = "G-WSRR2JGD27";
+
 const BackArrow = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
     <polyline points="15 18 9 12 15 6" />
   </svg>
 );
-const ChevronRight = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
-);
-const InfoIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="12" />
-    <line x1="12" y1="16" x2="12.01" y2="16" />
-  </svg>
-);
 
-// ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const TOTAL_Q = 9;
-const SCREENS = ["s2","s1","s3","s4","s5","s6","s7","s8","s9"];
-
-// TODO: replace with the real TidyCal booking URL for this funnel
-const TIDYCAL_URL = "https://tidycal.com/REPLACE_ME";
+function trackThankYou() {
+  if (typeof window.gtag !== "function") return;
+  window.gtag("config", GA_ID, {
+    page_title: "Thank you",
+    page_path: "/thank-you",
+  });
+  window.gtag("event", "generate_lead");
+}
 
 // ─── STEP WRAPPER ─────────────────────────────────────────────────────────────
 function Step({ children, animating }) {
@@ -309,26 +301,18 @@ export default function ZygnQuestionnaire() {
 
   const [cur, setCur] = useState("s2");
   const [animating, setAnimating] = useState(false);
-  const [answers, setAnswers] = useState({});
-  const [mods, setMods] = useState(new Set());
 
-  // Contact + studio form
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [studioName, setStudioName] = useState("");
   const [studioCity, setStudioCity] = useState("");
-
-  // Tools
-  const [toolOther, setToolOther] = useState("");
-  const [showToolOther, setShowToolOther] = useState(false);
-
-  // Mobile (carried forward from the popup form) + submission state
   const [phone, setPhone] = useState("");
+  const [team, setTeam] = useState("");
+  const [timeline, setTimeline] = useState("");
+  const [budget, setBudget] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [flowMsg, setFlowMsg] = useState("");
-
-  // Self-serve reason
-  const [ssBody, setSsBody] = useState("A live demo may not be the most useful next move right now. Start with these and come back when the timing is right.");
+  const thankYouTracked = useRef(false);
 
   // ── carry the mobile number forward from Pop.jsx ───────────────────────────
   useEffect(() => {
@@ -337,6 +321,13 @@ export default function ZygnQuestionnaire() {
     const carried = fromState || fromStorage || "";
     if (carried) setPhone(carried);
   }, [location.state]);
+
+  // Thank-you screen is in-app, so send a virtual page view plus a lead event once.
+  useEffect(() => {
+    if (cur !== "s-demo" || thankYouTracked.current) return;
+    thankYouTracked.current = true;
+    trackThankYou();
+  }, [cur]);
 
   // Inject styles once
   useEffect(() => {
@@ -349,23 +340,16 @@ export default function ZygnQuestionnaire() {
     }
   }, []);
 
-  // ── progress ─────────────────────────────────────────────────────────────
-  const stepIndex = SCREENS.indexOf(cur);
-  const progressStep = stepIndex >= 0 ? stepIndex + 1 : TOTAL_Q + 1;
-  const progressPct = progressStep <= 0 ? 0 : Math.min((progressStep / TOTAL_Q) * 100, 100);
-
-  const qcountText = (() => {
-    if (progressStep >= 1 && progressStep <= TOTAL_Q) return `Step ${progressStep} of ${TOTAL_Q}`;
-    return "";
-  })();
-
-  // ── step 2 validity (name, email, phone, studio name, city) ───────────────
-  const isStep2Valid =
+  const canContinue =
     fullName.trim().length >= 2 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
     phone.length === 10 &&
     studioName.trim().length >= 2 &&
     studioCity.trim().length >= 2;
+
+  const canSubmit = Boolean(team && timeline && budget);
+
+  const step = cur === "s2" ? 1 : cur === "s3" ? 2 : 0;
 
   // ── navigation ────────────────────────────────────────────────────────────
   const navigate = useCallback((to) => {
@@ -376,90 +360,22 @@ export default function ZygnQuestionnaire() {
     }, 200);
   }, []);
 
-  const go = useCallback((fromIndex) => {
-    const toScreen = SCREENS[fromIndex + 1];
-    if (toScreen) navigate(toScreen);
-  }, [navigate]);
-
-  const goBack = useCallback((fromIndex) => {
-    const toScreen = SCREENS[fromIndex - 1];
-    if (toScreen) {
-      setCur(toScreen); // instant back (no fade)
-    }
-  }, []);
-
-  // ── single-select pick ────────────────────────────────────────────────────
-  const pick = useCallback((key, val) => {
-    setAnswers(prev => ({ ...prev, [key]: val }));
-    if (key === "role" && val === "other") {
-      setTimeout(() => { navigate("s-other"); }, 260);
-      return;
-    }
-    const curIndex = SCREENS.indexOf(cur);
-    setTimeout(() => go(curIndex), 270);
-  }, [cur, go, navigate]);
-
-  // ── tools pick ───────────────────────────────────────────────────────────
-  const pickTools = useCallback((val) => {
-    setAnswers(prev => ({ ...prev, tools: val }));
-    if (val === "software") {
-      setShowToolOther(true);
-    } else {
-      setShowToolOther(false);
-      setToolOther("");
-      const curIndex = SCREENS.indexOf(cur);
-      setTimeout(() => go(curIndex), 270);
-    }
-  }, [cur, go]);
-
-  const advanceToolOther = useCallback(() => {
-    setAnswers(prev => ({ ...prev, toolOther }));
-    const curIndex = SCREENS.indexOf(cur);
-    go(curIndex);
-  }, [toolOther, cur, go]);
-
-  // ── studio details ────────────────────────────────────────────────────────
-  const advanceStudio = useCallback(() => {
-    setAnswers(prev => ({ ...prev, fullName, email, studioName, studioCity }));
-    go(SCREENS.indexOf("s2"));
-  }, [fullName, email, studioName, studioCity, go]);
-
-  // ── modules ───────────────────────────────────────────────────────────────
-  const toggleMod = useCallback((key) => {
-    setMods(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }, []);
-
-  const advanceMods = useCallback(() => {
-    setAnswers(prev => ({ ...prev, modules: Array.from(mods) }));
-    go(SCREENS.indexOf("s6"));
-  }, [mods, go]);
-
-  // ── submit flow form ──────────────────────────────────────────────────────
-  const submitFlowForm = useCallback(async (finalAnswers = answers) => {
+  const submitFlowForm = useCallback(async () => {
+    if (isSubmitting) return false;
     setIsSubmitting(true);
     setFlowMsg("");
 
     const submissionData = {
-      form_type: "flow",
+      form_type: "google_ads",
       country_code: "+91",
       mobile: phone,
       full_name: fullName,
-      email: email,
+      email,
       studio_name: studioName,
       studio_city: studioCity,
-      role: finalAnswers.role || "",
-      team: finalAnswers.team || "",
-      projects: finalAnswers.projects || "",
-      business_type: finalAnswers.biz || "",
-      modules: Array.from(mods),
-      tools: finalAnswers.tools || "",
-      tool_other: toolOther,
-      timeline: finalAnswers.timeline || "",
-      budget: finalAnswers.budget || "",
+      team,
+      timeline,
+      budget,
     };
 
     try {
@@ -477,46 +393,21 @@ export default function ZygnQuestionnaire() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [answers, mods, phone, fullName, email, studioCity, studioName, toolOther]);
+  }, [isSubmitting, phone, fullName, email, studioName, studioCity, team, timeline, budget]);
 
-  // ── final question: record budget, submit, go to success screen ──────────
-  const pickBudget = useCallback(async (val) => {
-    if (isSubmitting) return;
-    setAnswers(prev => ({ ...prev, budget: val }));
-    const submitted = await submitFlowForm({ ...answers, budget: val });
-    if (!submitted) return;
-    navigate("s-demo");
-  }, [isSubmitting, submitFlowForm, answers, navigate]);
+  const submitContact = useCallback(async () => {
+    if (!canSubmit || isSubmitting) return;
+    const submitted = await submitFlowForm();
+    if (submitted) navigate("s-demo");
+  }, [canSubmit, isSubmitting, submitFlowForm, navigate]);
 
   // ── render screens ────────────────────────────────────────────────────────
   const renderScreen = () => {
     switch (cur) {
-
-      // ── Q2: ROLE
-      case "s1": return (
-        <>
-          <button className="back" onClick={() => goBack(1)}><BackArrow />Back</button>
-          <div className="q">What is your role at the studio?</div>
-          <div className="sub">Let us know your role so we can tailor this conversation to the right decision-makers.</div>
-          <div className="opts">
-            {[
-              { val: "owner",     tl: "Studio Owner or Managing Partner",     ds: "You run the business and make the final call on tools" },
-              { val: "principal", tl: "Principal Designer",                    ds: "You lead design decisions and manage the wider team" },
-              { val: "ops",       tl: "Operations Head or Office Manager",     ds: "You oversee how the studio runs day to day" },
-              { val: "other",     tl: "Something else",                        ds: "Student, junior designer, intern, or just exploring personally" },
-            ].map(o => (
-              <button key={o.val} className={`opt${answers.role === o.val ? " on" : ""}`} onClick={() => pick("role", o.val)}>
-                <div><div className="tl">{o.tl}</div><div className="ds">{o.ds}</div></div>
-              </button>
-            ))}
-          </div>
-        </>
-      );
-
-      // ── Q1: CONTACT + STUDIO DETAILS (first screen)
       case "s2": return (
         <>
-          <div className="q">Tell us a bit about your studio.</div>
+          <div className="q">Tell us where to reach you.</div>
+          <div className="sub">Name, company, and where the studio works.</div>
           <div className="inp-row">
             <div className="inp-group">
               <div className="inp-label">Name</div>
@@ -538,234 +429,85 @@ export default function ZygnQuestionnaire() {
                 <div className="country-pre">+91</div>
                 <input id="phone-input" className="inp-field" type="tel" placeholder="98765 43210" maxLength={10} inputMode="numeric"
                   value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, ""))}
-                  onKeyDown={e => { if (e.key === "Enter") document.getElementById("studio-name-input")?.focus(); }}
+                  onKeyDown={e => { if (e.key === "Enter") document.getElementById("company-input")?.focus(); }}
                 />
               </div>
             </div>
             <div className="inp-group">
-              <div className="inp-label">Studio name</div>
-              <input id="studio-name-input" className="inp-field" type="text" placeholder="e.g. Forma Design Studio" maxLength={80}
+              <div className="inp-label">Company name</div>
+              <input id="company-input" className="inp-field" type="text" placeholder="e.g. Forma Design Studio" maxLength={80}
                 value={studioName} onChange={e => setStudioName(e.target.value)}
                 onKeyDown={e => { if (e.key === "Enter") document.getElementById("city-input")?.focus(); }}
               />
             </div>
             <div className="inp-group">
-              <div className="inp-label">City of operation</div>
+              <div className="inp-label">City</div>
               <input id="city-input" className="inp-field" type="text" placeholder="e.g. Bangalore" maxLength={60}
                 value={studioCity} onChange={e => setStudioCity(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && isStep2Valid) advanceStudio(); }}
+                onKeyDown={e => { if (e.key === "Enter" && canContinue) navigate("s3"); }}
               />
             </div>
-            <button className="btn" disabled={!isStep2Valid} onClick={advanceStudio}>Continue</button>
+            <button className="btn" disabled={!canContinue} onClick={() => navigate("s3")}>Continue</button>
           </div>
         </>
       );
 
-      // ── Q3: TEAM SIZE
       case "s3": return (
         <>
-          <button className="back" onClick={() => goBack(2)}><BackArrow />Back</button>
-          <div className="q">How many people are on your team?</div>
-          <div className="sub">Count designers, project managers, site supervisors, and back-office staff.</div>
-          <div className="opts g2">
+          <button className="back" onClick={() => setCur("s2")}><BackArrow />Back</button>
+          <div className="q">A bit about the team.</div>
+          <div className="sub">Team size, timing, and budget.</div>
+
+          <div className="inp-label" style={{ marginBottom: 8 }}>How many people are on the team?</div>
+          <div className="opts g2" style={{ marginBottom: 18 }}>
             {[
-              { val: "s5",     tl: "1 to 5",       ds: "Early stage" },
-              { val: "s14",    tl: "6 to 14",      ds: "Growing studio" },
-              { val: "s30",    tl: "15 to 30",     ds: "Established firm" },
-              { val: "s60",    tl: "31 to 60",     ds: "Large practice" },
+              { val: "s5", tl: "1 to 5" },
+              { val: "s14", tl: "6 to 14" },
+              { val: "s30", tl: "15 to 30" },
+              { val: "s60", tl: "31 to 60" },
+              { val: "s60plus", tl: "More than 60", wide: true },
             ].map(o => (
-              <button key={o.val} className={`opt${answers.team === o.val ? " on" : ""}`} onClick={() => pick("team", o.val)}>
-                <div className="tl">{o.tl}</div><div className="ds">{o.ds}</div>
+              <button key={o.val} className={`opt${o.wide ? " full-col" : ""}${team === o.val ? " on" : ""}`} onClick={() => setTeam(o.val)}>
+                <div className="tl">{o.tl}</div>
               </button>
             ))}
-            <button className={`opt full-col${answers.team === "s60plus" ? " on" : ""}`} onClick={() => pick("team", "s60plus")}>
-              <div className="tl">More than 60</div><div className="ds">Enterprise scale</div>
-            </button>
           </div>
-        </>
-      );
 
-      // ── Q4: ACTIVE PROJECTS
-      case "s4": return (
-        <>
-          <button className="back" onClick={() => goBack(3)}><BackArrow />Back</button>
-          <div className="q">How many live projects is your studio running right now?</div>
-          <div className="sub">Active projects in execution or active design, not past work or pipeline leads.</div>
-          <div className="opts g2">
+          <div className="inp-label" style={{ marginBottom: 8 }}>When are you looking to start?</div>
+          <div className="opts" style={{ marginBottom: 18 }}>
             {[
-              { val: "p2",     tl: "1 to 2",       ds: "Selective load" },
-              { val: "p5",     tl: "3 to 5",       ds: "Steady pipeline" },
-              { val: "p10",    tl: "6 to 10",      ds: "High volume" },
-              { val: "p10plus",tl: "More than 10", ds: "Enterprise scale" },
+              { val: "now", tl: "This month" },
+              { val: "q90", tl: "Within the next 90 days" },
+              { val: "exploring", tl: "Just exploring for now" },
             ].map(o => (
-              <button key={o.val} className={`opt${answers.projects === o.val ? " on" : ""}`} onClick={() => pick("projects", o.val)}>
-                <div className="tl">{o.tl}</div><div className="ds">{o.ds}</div>
+              <button key={o.val} className={`opt${timeline === o.val ? " on" : ""}`} onClick={() => setTimeline(o.val)}>
+                <div className="tl">{o.tl}</div>
               </button>
             ))}
           </div>
-        </>
-      );
 
-      // ── Q5: BUSINESS TYPE
-      case "s5": return (
-        <>
-          <button className="back" onClick={() => goBack(4)}><BackArrow />Back</button>
-          <div className="q">What kind of projects does your studio primarily work on?</div>
-          <div className="sub">Pick the one that best describes where most of your revenue comes from.</div>
-          <div className="opts">
-            {[
-              { val: "resi",    tl: "Residential interior design",                        ds: "Apartments, villas, and private homes" },
-              { val: "comm",    tl: "Commercial interior design",                         ds: "Offices, retail, hospitality, and commercial spaces" },
-              { val: "turnkey", tl: "Turnkey projects",                                   ds: "Design, procurement, and site delivery end to end" },
-              { val: "arch",    tl: "Architecture practice with an interiors arm",        ds: "Architecture-led but interiors is a meaningful part of the business" },
-              { val: "other",   tl: "Landscape, civil, or construction without an interiors arm", ds: "Interiors is not the primary or a significant part of the work" },
-            ].map(o => (
-              <button key={o.val} className={`opt${answers.biz === o.val ? " on" : ""}`} onClick={() => pick("biz", o.val)}>
-                <div><div className="tl">{o.tl}</div><div className="ds">{o.ds}</div></div>
-              </button>
-            ))}
-          </div>
-        </>
-      );
-
-      // ── Q6: MODULES
-      case "s6": return (
-        <>
-          <button className="back" onClick={() => goBack(5)}><BackArrow />Back</button>
-          <div className="q">Which areas are you looking to get control of?</div>
-          <p className="mod-hint">Select all that apply. Your call will focus on exactly these.</p>
-          <div className="mod-grid">
-            {[
-              { key: "crm",    label: "Sales CRM" },
-              { key: "design", label: "Design Workflow" },
-              { key: "proc",   label: "Procurement and BOQ" },
-              { key: "inv",    label: "Inventory" },
-              { key: "site",   label: "Site Execution" },
-              { key: "acc",    label: "Accounts" },
-              { key: "hr",     label: "HR and Payroll" },
-              { key: "tasks",  label: "Task Management" },
-            ].map(m => (
-              <button key={m.key} className={`mod${mods.has(m.key) ? " on" : ""}`} onClick={() => toggleMod(m.key)}>
-                <span className="tl">{m.label}</span>
-              </button>
-            ))}
-          </div>
-          <button className="btn" disabled={mods.size === 0} onClick={advanceMods}>Continue</button>
-        </>
-      );
-
-      // ── Q7: CURRENT TOOLS
-      case "s7": return (
-        <>
-          <button className="back" onClick={() => { setShowToolOther(false); goBack(6); }}><BackArrow />Back</button>
-          <div className="q">What are you currently using to manage projects and leads?</div>
-          <div className="sub">No judgment here. This just helps us show you a realistic migration path.</div>
-          <div className="opts">
-            {[
-              { val: "sheets",   tl: "Spreadsheets",           ds: "Excel, Google Sheets, or similar" },
-              { val: "chat",     tl: "WhatsApp and Email only", ds: "Conversations are how projects are tracked right now" },
-              { val: "software", tl: "Another software",        ds: "We are already on a platform but looking to switch" },
-              { val: "nothing",  tl: "Nothing formal",          ds: "Each project is managed however the team sees fit" },
-            ].map(o => (
-              <button key={o.val} className={`opt${answers.tools === o.val ? " on" : ""}`} onClick={() => pickTools(o.val)}>
-                <div><div className="tl">{o.tl}</div><div className="ds">{o.ds}</div></div>
-              </button>
-            ))}
-          </div>
-          <div className={`reveal${showToolOther ? " open" : ""}`}>
-            <input className="inp-field" type="text" placeholder="Which software? e.g. Houzz Pro, Studio Designer"
-              maxLength={80} value={toolOther} onChange={e => setToolOther(e.target.value)} />
-            <button className="btn" disabled={toolOther.trim().length < 2} style={{ marginTop: 10 }} onClick={advanceToolOther}>Continue</button>
-          </div>
-        </>
-      );
-
-      // ── Q8: TIMELINE
-      case "s8": return (
-        <>
-          <button className="back" onClick={() => goBack(7)}><BackArrow />Back</button>
-          <div className="q">When are you looking to bring a new system in?</div>
-          <div className="sub">Be honest. It genuinely shapes how we spend the call.</div>
-          <div className="opts">
-            {[
-              { val: "now",       tl: "This month",               ds: "We are actively evaluating and ready to move" },
-              { val: "q90",       tl: "Within the next 90 days",  ds: "A decision is on the horizon for the studio" },
-              { val: "exploring", tl: "Just exploring for now",    ds: "Mapping what is out there before committing to anything" },
-            ].map(o => (
-              <button key={o.val} className={`opt${answers.timeline === o.val ? " on" : ""}`} onClick={() => pick("timeline", o.val)}>
-                <div><div className="tl">{o.tl}</div><div className="ds">{o.ds}</div></div>
-              </button>
-            ))}
-          </div>
-        </>
-      );
-
-      // ── Q9: BUDGET (last question: selecting an option submits the flow)
-      case "s9": return (
-        <>
-          <button className="back" onClick={() => goBack(8)}><BackArrow />Back</button>
-          <div className="q">Is this investment aligned with your budget?</div>
-          <div className="sub">Would your studio invest <strong>₹4–6K per team member annually</strong> for <strong>better project control and visibility</strong>?</div>
+          <div className="inp-label" style={{ marginBottom: 8 }}>Does ₹4–6K per person a year fit?</div>
           <div className="budget-opts">
-            <button className={`budget-card${answers.budget === "yes" ? " on" : ""}`} disabled={isSubmitting} onClick={() => pickBudget("yes")}>
-              <div className="emo">✅</div>
+            <button className={`budget-card${budget === "yes" ? " on" : ""}`} onClick={() => setBudget("yes")}>
               <div className="bl">Yes, that fits</div>
-              <div className="bd">We are willing to invest in the right system</div>
             </button>
-            <button className={`budget-card${answers.budget === "no" ? " on" : ""}`} disabled={isSubmitting} onClick={() => pickBudget("no")}>
-              <div className="emo">🤔</div>
+            <button className={`budget-card${budget === "no" ? " on" : ""}`} onClick={() => setBudget("no")}>
               <div className="bl">Not at this stage</div>
-              <div className="bd">Let me check and come back</div>
             </button>
           </div>
+
+          <button className="btn" style={{ marginTop: 18 }} disabled={!canSubmit || isSubmitting} onClick={submitContact}>
+            {isSubmitting ? "Submitting..." : "Submit"}
+          </button>
           {flowMsg && <p className="flow-msg">{flowMsg}</p>}
-          {isSubmitting && <p className="flow-msg" style={{ color: "var(--muted)" }}>Submitting...</p>}
         </>
       );
 
-      // ── EARLY EXIT: non-professional
-      case "s-other": return (
-        <div className="result">
-          <div className="emblem read">📖</div>
-          <div className="res-h">Here is the right place to start.</div>
-          <div className="res-b">A one-on-one demo is best reserved for studios actively evaluating tools. But there is a lot you can explore on your own before that conversation makes sense.</div>
-          <div className="links">
-            {["Watch a 5-minute product walkthrough", "Start a free trial", "Browse the help docs"].map(label => (
-              <a key={label} href="https://zygn.app" target="_blank" rel="noreferrer" className="link-row">
-                {label}<ChevronRight />
-              </a>
-            ))}
-          </div>
-        </div>
-      );
-
-      // ── RESULT: SUCCESS
       case "s-demo": return (
         <div className="result">
           <div className="emblem go">✅</div>
           <div className="res-h">You're all set.</div>
-<div className="res-b">Thank you! Your details have been successfully submitted.</div>                </div>
-      );
-
-      // ── RESULT: SELF-SERVE
-      case "s-ss": return (
-        <div className="result">
-          <div className="emblem read">📖</div>
-          <div className="res-h">Here is the best next step for you.</div>
-          <div className="res-b">{ssBody}</div>
-          <div className="links">
-            {[
-              "Watch a 5-minute product walkthrough",
-              "Start the free trial",
-              "See how other studios use zygn",
-            ].map(label => (
-              <a key={label} href="https://zygn.app" target="_blank" rel="noreferrer" className="link-row">
-                {label}<ChevronRight />
-              </a>
-            ))}
-          </div>
-          <div className="divider">or</div>
-          <button className="btn ghost" onClick={() => navigate("s-demo")}>I still want to talk to someone</button>
+          <div className="res-b">Thank you! Your details have been successfully submitted.</div>
         </div>
       );
 
@@ -783,13 +525,14 @@ export default function ZygnQuestionnaire() {
             <img src={Logo} alt="Zygn" onError={e => e.target.style.display = "none"} />
             <span className="logo-text">zygn</span>
           </div>
-          <div className={`qcount${qcountText ? " show" : ""}`}>{qcountText}</div>
+          <div className={`qcount${step ? " show" : ""}`}>{step ? `Step ${step} of 2` : ""}</div>
         </div>
 
-        {/* PROGRESS BAR */}
-        <div className="prog-rail">
-          <div className="prog-bar" style={{ width: `${progressPct}%` }} />
-        </div>
+        {step > 0 && (
+          <div className="prog-rail">
+            <div className="prog-bar" style={{ width: `${(step / 2) * 100}%` }} />
+          </div>
+        )}
 
         {/* STEP CONTENT */}
         <Step animating={animating}>
